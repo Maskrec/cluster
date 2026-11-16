@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# Almacenamiento temporal y videos procesados
+storage/raw_videos/*
+!storage/raw_videos/.gitkeep
+storage/processed_videos/*
+!storage/processed_videos/.gitkeep
+storage/temp_frames/*
+!storage/temp_frames/.gitkeep
+
+# IDEs
+.vscode/
+.idea/
+
