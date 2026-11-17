@@ -1,12 +1,13 @@
-"""
-Cliente de Red del Clúster de Procesamiento de Video.
-Se encarga de la conexión con el servidor BROKER, transmisión del archivo de video original
-y recepción del video procesado final.
-"""
-
 import socket
+import sys
 import time
 from pathlib import Path
+
+# Asegurar que la raíz del proyecto esté en sys.path para ejecuciones directas
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from typing import Callable, Optional
 
 from common.protocol import (
@@ -18,16 +19,15 @@ from common.protocol import (
 )
 from config.settings import (
     BROKER_CLIENT_PORT,
-    BROKER_HOST,
+    DEFAULT_BROKER_HOST,
     PROCESSED_VIDEOS_DIR,
     SOCKET_TIMEOUT,
 )
 
 
 class VideoClient:
-    """Maneja la interacción de red del cliente con el Broker."""
 
-    def __init__(self, host: str = BROKER_HOST, port: int = BROKER_CLIENT_PORT):
+    def __init__(self, host: str = DEFAULT_BROKER_HOST, port: int = BROKER_CLIENT_PORT):
         self.host = host
         self.port = port
 
@@ -37,14 +37,7 @@ class VideoClient:
         filter_name: str = "grayscale",
         status_callback: Optional[Callable[[str], None]] = None,
     ) -> Path:
-        """
-        Envía un archivo de video al Broker y espera a recibir el video procesado.
-
-        :param video_path: Ruta del video original en disco.
-        :param filter_name: Filtro solicitado (ej. 'grayscale', 'invert', 'edge_detection').
-        :param status_callback: Función opcional para notificar progreso/estados a la UI.
-        :return: Ruta en disco del video procesado resultante.
-        """
+      
         video_path = Path(video_path)
         if not video_path.exists():
             raise FileNotFoundError(f"El video '{video_path}' no existe.")
