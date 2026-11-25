@@ -6,19 +6,21 @@ Sistema distribuido cliente-servidor para procesamiento y transformación de vid
 
 ## Características Principales
 
+- **Control Total desde la Interfaz Gráfica:** Puedes iniciar y detener el Broker y los Workers con un solo clic desde la propia ventana de la aplicación, sin necesidad de abrir terminales adicionales.
+- **Biblioteca Compartida Distribuida:** Repositorio centralizado de videos donde cualquier computadora/laptop conectada puede:
+  - Ver el catálogo de videos en red.
+  - Subir y compartir videos a la biblioteca del clúster.
+  - Descargar cualquier video a su disco local a través del sistema por Sockets TCP.
+  - Previsualizar y reproducir videos compartidos o procesados.
 - **Conexión Multidispositivo (LAN/Wi-Fi):** Puedes conectar múltiples computadoras, laptops o nodos en la misma red local para acelerar el procesamiento de fotogramas en paralelo.
 - **Sin límite de tiempo:** Soporta videos de cualquier duración y tamaño.
 - **Grabador de Cámara Web Integrado:** Opción para capturar video en vivo desde la cámara web directamente en la interfaz gráfica del cliente.
-- **Mejora de Calidad y Filtros:**
-  - `sharpen`: Realce de nitidez y micro-contraste.
+- **Super-Resolución y Mejora de Calidad:**
+  - `upscale_hd`: Aumento de resolución a 2X (Lanczos4) + Realce de detalles + Enfoque + Contraste dinámico.
+  - `detail_enhance`: Realce profundo de texturas y nitidez a resolución nativa.
   - `contrast`: Ecualización adaptativa de contraste y luz (CLAHE).
-  - `denoise`: Reducción de ruido preservando contornos (Bilateral Filter).
-  - `grayscale`: Escala de grises.
-  - `edge_detection`: Detección de contornos Canny.
-  - `blur`: Desenfoque gaussiano.
-  - `sepia`: Tonalidad vintage/sepia.
-  - `invert`: Negativo fotográfico.
-- **Alta Calidad:** Codificación de fotogramas en JPEG al 95% para preservar la fidelidad visual original.
+  - `denoise`: Reducción de ruido bilateral preservando contornos.
+  - Filtros clásicos: Grayscale, Canny, Blur, Sepia, Invert.
 
 ---
 

@@ -25,9 +25,10 @@ STORAGE_DIR = BASE_DIR / "storage"
 RAW_VIDEOS_DIR = STORAGE_DIR / "raw_videos"
 PROCESSED_VIDEOS_DIR = STORAGE_DIR / "processed_videos"
 TEMP_FRAMES_DIR = STORAGE_DIR / "temp_frames"
+SHARED_LIBRARY_DIR = STORAGE_DIR / "shared_library"
 
 # Asegurar que existan los directorios
-for directory in (RAW_VIDEOS_DIR, PROCESSED_VIDEOS_DIR, TEMP_FRAMES_DIR):
+for directory in (RAW_VIDEOS_DIR, PROCESSED_VIDEOS_DIR, TEMP_FRAMES_DIR, SHARED_LIBRARY_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 
 # Dirección IP local detectada de este equipo

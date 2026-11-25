@@ -25,6 +25,12 @@ from common.protocol import (
     MSG_BROKER_PROCESSED_VIDEO,
     MSG_CLIENT_UPLOAD_VIDEO,
     MSG_ERROR,
+    MSG_LIBRARY_DOWNLOAD_REQ,
+    MSG_LIBRARY_DOWNLOAD_RESP,
+    MSG_LIBRARY_LIST_REQ,
+    MSG_LIBRARY_LIST_RESP,
+    MSG_LIBRARY_UPLOAD_REQ,
+    MSG_LIBRARY_UPLOAD_RESP,
     MSG_WORKER_FRAME_RESULT,
     MSG_WORKER_FRAME_TASK,
     MSG_WORKER_REGISTER,
@@ -39,6 +45,7 @@ from config.settings import (
     LOCAL_IP,
     PROCESSED_VIDEOS_DIR,
     RAW_VIDEOS_DIR,
+    SHARED_LIBRARY_DIR,
 )
 
 
@@ -159,71 +166,146 @@ class BrokerServer:
                 self.is_running = False
 
     def _handle_client(self, conn: socket.socket, addr: Tuple[str, int]):
-        """Atiende a un cliente: recibe el video, lo distribuye y retorna el resultado."""
+        """Atiende a un cliente: procesa videos o gestiona la biblioteca compartida."""
         print(f"[BROKER] Cliente conectado desde {addr}")
         try:
-            meta, video_payload = receive_message(conn)
-            if meta.get("type") != MSG_CLIENT_UPLOAD_VIDEO:
-                send_message(conn, {"type": MSG_ERROR, "error": "Tipo de mensaje no reconocido."})
+            meta, payload = receive_message(conn)
+            msg_type = meta.get("type")
+
+            # =====================================================================
+            # BIBLIOTECA COMPARTIDA: Listar archivos disponibles
+            # =====================================================================
+            if msg_type == MSG_LIBRARY_LIST_REQ:
+                files_list = []
+                seen_names = set()
+
+                # Revisar archivos en biblioteca compartida y en procesados
+                for directory in (SHARED_LIBRARY_DIR, PROCESSED_VIDEOS_DIR):
+                    if not directory.exists():
+                        continue
+                    for f in directory.iterdir():
+                        if f.is_file() and not f.name.startswith(".") and f.name not in seen_names:
+                            seen_names.add(f.name)
+                            stat = f.stat()
+                            files_list.append({
+                                "filename": f.name,
+                                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                                "modified": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
+                                "origin": "Procesado" if "output" in f.name or "processed" in f.name else "Compartido",
+                            })
+
+                # Ordenar por fecha descendente
+                files_list.sort(key=lambda x: x["modified"], reverse=True)
+                send_message(conn, {"type": MSG_LIBRARY_LIST_RESP, "files": files_list})
                 return
 
-            filename = meta.get("filename", "input.mp4")
-            filter_name = meta.get("filter", "grayscale")
+            # =====================================================================
+            # BIBLIOTECA COMPARTIDA: Subir archivo directamente
+            # =====================================================================
+            elif msg_type == MSG_LIBRARY_UPLOAD_REQ:
+                filename = meta.get("filename", f"shared_{int(time.time())}.mp4")
+                target_path = SHARED_LIBRARY_DIR / filename
+                target_path.write_bytes(payload)
+                print(f"[BROKER] Archivo '{filename}' guardado en la Biblioteca Compartida ({len(payload)/1024/1024:.2f} MB).")
+                send_message(conn, {"type": MSG_LIBRARY_UPLOAD_RESP, "filename": filename, "status": "OK"})
+                return
 
-            print(f"[BROKER] Video recibido '{filename}' ({len(video_payload) / 1024 / 1024:.2f} MB). Filtro solicitado: '{filter_name}'")
+            # =====================================================================
+            # BIBLIOTECA COMPARTIDA: Descargar archivo específico
+            # =====================================================================
+            elif msg_type == MSG_LIBRARY_DOWNLOAD_REQ:
+                filename = meta.get("filename", "")
+                target_path = SHARED_LIBRARY_DIR / filename
+                if not target_path.exists():
+                    target_path = PROCESSED_VIDEOS_DIR / filename
 
-            # 1. Validar disponibilidad de workers en el clúster
-            if self.load_balancer.active_count() == 0:
-                print("[BROKER] ERROR: No hay Nodos de Procesamiento (Workers) activos.")
+                if not target_path.exists() or not target_path.is_file():
+                    send_message(conn, {"type": MSG_ERROR, "error": f"Archivo '{filename}' no encontrado en la biblioteca."})
+                    return
+
+                print(f"[BROKER] Transfiriendo archivo '{filename}' al cliente {addr}...")
+                file_bytes = target_path.read_bytes()
                 send_message(
                     conn,
-                    {
-                        "type": MSG_ERROR,
-                        "error": "No hay ningún Nodo de Procesamiento (Worker) activo en el clúster. Levanta los workers primero.",
-                    },
+                    {"type": MSG_LIBRARY_DOWNLOAD_RESP, "filename": filename, "size_mb": round(len(file_bytes)/(1024*1024), 2)},
+                    payload=file_bytes,
                 )
                 return
 
-            # 2. Descomponer el video en fotogramas
-            print(f"[BROKER] Descomponiendo '{filename}' en fotogramas...")
-            frames, fps, frame_size = VideoManager.extract_frames(video_payload, filename)
-            total_frames = len(frames)
-            print(f"[BROKER] Extracción completa: {total_frames} fotogramas a {fps:.1f} FPS, resolución {frame_size[0]}x{frame_size[1]}")
+            # =====================================================================
+            # PROCESAMIENTO DISTRIBUIDO: Enviar video al clúster
+            # =====================================================================
+            elif msg_type == MSG_CLIENT_UPLOAD_VIDEO:
+                video_payload = payload
+                filename = meta.get("filename", "input.mp4")
+                filter_name = meta.get("filter", "upscale_hd")
 
-            if total_frames == 0:
-                send_message(conn, {"type": MSG_ERROR, "error": "El video no contiene fotogramas válidos."})
+                print(f"[BROKER] Video recibido '{filename}' ({len(video_payload) / 1024 / 1024:.2f} MB). Filtro solicitado: '{filter_name}'")
+
+                # 1. Validar disponibilidad de workers en el clúster
+                if self.load_balancer.active_count() == 0:
+                    print("[BROKER] ERROR: No hay Nodos de Procesamiento (Workers) activos.")
+                    send_message(
+                        conn,
+                        {
+                            "type": MSG_ERROR,
+                            "error": "No hay ningún Nodo de Procesamiento (Worker) activo en el clúster. Inicia los workers primero desde la interfaz.",
+                        },
+                    )
+                    return
+
+                # 2. Descomponer el video en fotogramas
+                print(f"[BROKER] Descomponiendo '{filename}' en fotogramas...")
+                frames, fps, frame_size = VideoManager.extract_frames(video_payload, filename)
+                total_frames = len(frames)
+                print(f"[BROKER] Extracción completa: {total_frames} fotogramas a {fps:.1f} FPS, resolución {frame_size[0]}x{frame_size[1]}")
+
+                if total_frames == 0:
+                    send_message(conn, {"type": MSG_ERROR, "error": "El video no contiene fotogramas válidos."})
+                    return
+
+                # 3. Distribuir fotogramas a los Workers mediante Round Robin concurrente
+                start_time = time.time()
+                print(f"[BROKER] Distribuyendo {total_frames} frames entre {self.load_balancer.active_count()} workers activos...")
+                processed_frames = self._distribute_frames_to_workers(frames, filter_name)
+
+                elapsed_processing = time.time() - start_time
+                print(f"[BROKER] Procesamiento distribuido completado en {elapsed_processing:.2f} s. Reensamblando video...")
+
+                # 4. Reconstruir el video en orden estricto de frame_id
+                output_filename = f"broker_output_{int(time.time())}_{filename}"
+                output_path = PROCESSED_VIDEOS_DIR / output_filename
+                processed_video_bytes = VideoManager.build_video_from_frames(
+                    processed_frames=processed_frames,
+                    output_path=output_path,
+                    fps=fps,
+                    frame_size=frame_size,
+                )
+
+                # Guardar automáticamente copia en la Biblioteca Compartida para acceso entre laptops
+                try:
+                    shared_copy = SHARED_LIBRARY_DIR / output_filename
+                    shared_copy.write_bytes(processed_video_bytes)
+                except Exception as e:
+                    print(f"[BROKER] Aviso al guardar en biblioteca compartida: {e}")
+
+                # 5. Enviar el video final al Cliente
+                print(f"[BROKER] Enviando video final al Cliente ({len(processed_video_bytes) / 1024 / 1024:.2f} MB)...")
+                send_message(
+                    conn,
+                    {
+                        "type": MSG_BROKER_PROCESSED_VIDEO,
+                        "filename": output_filename,
+                        "frames_count": total_frames,
+                    },
+                    payload=processed_video_bytes,
+                )
+                print(f"[BROKER] Transacción con cliente {addr} finalizada con éxito.")
                 return
 
-            # 3. Distribuir fotogramas a los Workers mediante Round Robin concurrente
-            start_time = time.time()
-            print(f"[BROKER] Distribuyendo {total_frames} frames entre {self.load_balancer.active_count()} workers activos...")
-            processed_frames = self._distribute_frames_to_workers(frames, filter_name)
-
-            elapsed_processing = time.time() - start_time
-            print(f"[BROKER] Procesamiento distribuido completado en {elapsed_processing:.2f} s. Reensamblando video...")
-
-            # 4. Reconstruir el video en orden estricto de frame_id
-            output_filename = f"broker_output_{int(time.time())}_{filename}"
-            output_path = PROCESSED_VIDEOS_DIR / output_filename
-            processed_video_bytes = VideoManager.build_video_from_frames(
-                processed_frames=processed_frames,
-                output_path=output_path,
-                fps=fps,
-                frame_size=frame_size,
-            )
-
-            # 5. Enviar el video final al Cliente
-            print(f"[BROKER] Enviando video final al Cliente ({len(processed_video_bytes) / 1024 / 1024:.2f} MB)...")
-            send_message(
-                conn,
-                {
-                    "type": MSG_BROKER_PROCESSED_VIDEO,
-                    "filename": output_filename,
-                    "frames_count": total_frames,
-                },
-                payload=processed_video_bytes,
-            )
-            print(f"[BROKER] Transacción con cliente {addr} finalizada con éxito.")
+            else:
+                send_message(conn, {"type": MSG_ERROR, "error": f"Tipo de mensaje no reconocido: '{msg_type}'."})
+                return
 
         except Exception as exc:
             print(f"[BROKER] Error procesando cliente {addr}: {exc}")
