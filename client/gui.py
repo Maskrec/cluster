@@ -59,9 +59,8 @@ from config.settings import (
     SHARED_LIBRARY_DIR,
 )
 
-# Detectar ejecutable de Python del entorno virtual
-VENV_PYTHON = BASE_DIR / ".venv" / "Scripts" / "python.exe"
-PYTHON_EXEC = str(VENV_PYTHON.resolve()) if VENV_PYTHON.exists() else sys.executable
+# Usar siempre el ejecutable de Python activo que inició la GUI (garantiza compatibilidad en cualquier PC)
+PYTHON_EXEC = sys.executable
 
 
 class CameraRecordingDialog(QDialog):

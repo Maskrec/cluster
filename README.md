@@ -71,12 +71,24 @@ cluster/
 
 ## Cómo Ejecutar el Sistema
 
-### Opción Rápida (Windows):
+### Si vas a ejecutar el proyecto en una NUEVA Computadora / Laptop:
+Los entornos virtuales de Python (`.venv`) **no se pueden copiar y pegar entre PCs** porque contienen rutas fijas de la máquina donde se crearon. 
+Por eso, al pasar la carpeta a una nueva computadora:
+1. Haz doble clic en:
+   ```cmd
+   instalar_en_otra_pc.bat
+   ```
+   *(Este script detecta Python en la nueva PC, crea su propio `.venv` local e instala las librerías automáticamente).*
+2. Luego haz doble clic en `start_cluster.bat` o abre la GUI.
+
+---
+
+### En la Computadora Principal (PC 1):
 Ejecuta el archivo:
 ```powershell
 .\start_cluster.bat
 ```
-Y selecciona la opción **1** para abrir automáticamente el Broker, 2 Workers y la Interfaz Gráfica en ventanas separadas.
+Y selecciona la opción **1** para abrir la Interfaz Gráfica con su Centro de Control Integrado.
 
 ---
 
