@@ -37,8 +37,9 @@ LOCAL_IP = get_local_ip()
 # Para el Broker: "0.0.0.0" permite escuchar conexiones desde cualquier interfaz (localhost y otros dispositivos LAN)
 BROKER_BIND_HOST = "0.0.0.0"
 
-# Host por defecto al que se conectan los clientes y workers (puede sobrescribirse en la GUI o CLI)
-DEFAULT_BROKER_HOST = LOCAL_IP
+# Host por defecto: 127.0.0.1 para conexiones en esta misma máquina
+# (Para conectar desde otra laptop, se escribe en la GUI la IP de la red: LOCAL_IP)
+DEFAULT_BROKER_HOST = "127.0.0.1"
 
 # Puertos separados para evitar colisiones entre el cliente y los nodos
 BROKER_CLIENT_PORT = 5000

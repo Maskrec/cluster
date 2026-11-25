@@ -53,6 +53,7 @@ from config.settings import (
     BASE_DIR,
     BROKER_CLIENT_PORT,
     DEFAULT_BROKER_HOST,
+    LOCAL_IP,
     PROCESSED_VIDEOS_DIR,
     RAW_VIDEOS_DIR,
     SHARED_LIBRARY_DIR,
@@ -325,7 +326,7 @@ class MainWindow(QMainWindow):
         control_layout = QHBoxLayout(control_group)
 
         # Botón maestro de 1 Clic
-        self.all_services_btn = QPushButton("🚀 Iniciar Clúster Completo (1 Clic)")
+        self.all_services_btn = QPushButton("🚀 Iniciar Clúster (Broker + 1 Worker)")
         self.all_services_btn.setFont(QFont("Arial", 9, QFont.Weight.Bold))
         self.all_services_btn.setStyleSheet("background-color: #0b8043; color: white; padding: 6px 12px; border-radius: 4px;")
         self.all_services_btn.clicked.connect(self.toggle_all_services)
@@ -340,19 +341,20 @@ class MainWindow(QMainWindow):
         self.broker_badge.setStyleSheet("font-weight: bold; color: #555;")
         control_layout.addWidget(self.broker_badge)
 
-        # Control individual Workers
-        self.workers_btn = QPushButton("▶ Iniciar 2 Workers")
+        # Control individual Worker (1 worker por GUI)
+        self.workers_btn = QPushButton("▶ Iniciar 1 Worker")
         self.workers_btn.clicked.connect(self.toggle_workers)
         control_layout.addWidget(self.workers_btn)
 
-        self.workers_badge = QLabel("Workers: ⚪ 0 Activos")
+        self.workers_badge = QLabel("Worker: ⚪ Inactivo")
         self.workers_badge.setStyleSheet("font-weight: bold; color: #555;")
         control_layout.addWidget(self.workers_badge)
 
         # Configuración de Red
         control_layout.addSpacing(15)
         control_layout.addWidget(QLabel("IP Broker:"))
-        self.host_input = QLineEdit(DEFAULT_BROKER_HOST)
+        self.host_input = QLineEdit("127.0.0.1")
+        self.host_input.setToolTip(f"Usa 127.0.0.1 en esta máquina. Para conectar otra laptop, usa la IP de red de la PC 1: {LOCAL_IP}")
         self.host_input.setMaximumWidth(120)
         control_layout.addWidget(self.host_input)
 
@@ -360,6 +362,10 @@ class MainWindow(QMainWindow):
         self.port_input = QLineEdit(str(BROKER_CLIENT_PORT))
         self.port_input.setMaximumWidth(55)
         control_layout.addWidget(self.port_input)
+
+        self.ip_info_label = QLabel(f"(IP de esta PC en red: {LOCAL_IP})")
+        self.ip_info_label.setStyleSheet("color: #666; font-size: 10px;")
+        control_layout.addWidget(self.ip_info_label)
 
         main_layout.addWidget(control_group)
 
@@ -512,15 +518,15 @@ class MainWindow(QMainWindow):
     # GESTIÓN DE SERVICIOS LOCALES (BROKER Y WORKERS DESDE LA GUI)
     # =========================================================================
     def toggle_all_services(self):
-        """Inicia o detiene todo el clúster con 1 solo clic."""
+        """Inicia o detiene el clúster (Broker + 1 Worker) con 1 solo clic."""
         if self.broker_process is None and len(self.worker_processes) == 0:
             self.start_broker_process()
-            QTimer.singleShot(1500, self.start_workers_process)
+            QTimer.singleShot(1500, lambda: self.start_workers_process(count=1))
             self.all_services_btn.setText("⏹ Detener Clúster Completo")
             self.all_services_btn.setStyleSheet("background-color: #d93025; color: white; padding: 6px 12px; border-radius: 4px;")
         else:
             self.stop_all_services()
-            self.all_services_btn.setText("🚀 Iniciar Clúster Completo (1 Clic)")
+            self.all_services_btn.setText("🚀 Iniciar Clúster (Broker + 1 Worker)")
             self.all_services_btn.setStyleSheet("background-color: #0b8043; color: white; padding: 6px 12px; border-radius: 4px;")
 
     def toggle_broker(self):
@@ -557,18 +563,18 @@ class MainWindow(QMainWindow):
 
     def toggle_workers(self):
         if len(self.worker_processes) == 0:
-            self.start_workers_process()
+            self.start_workers_process(count=1)
         else:
             self.stop_workers_process()
 
-    def start_workers_process(self, count: int = 2):
+    def start_workers_process(self, count: int = 1):
         if len(self.worker_processes) > 0:
             return
         script_path = str((ROOT_DIR / "worker" / "worker_node.py").resolve())
-        host = self.host_input.text().strip() or DEFAULT_BROKER_HOST
+        host = self.host_input.text().strip() or "127.0.0.1"
 
         for i in range(1, count + 1):
-            worker_id = f"worker_gui_{i}"
+            worker_id = f"worker_gui_{os.getpid()}_{i}"
             proc = subprocess.Popen(
                 [PYTHON_EXEC, script_path, "--id", worker_id, "--host", host],
                 cwd=str(ROOT_DIR),
@@ -576,10 +582,10 @@ class MainWindow(QMainWindow):
             )
             self.worker_processes.append(proc)
 
-        self.workers_badge.setText(f"Workers: 🟢 {len(self.worker_processes)} Activos")
+        self.workers_badge.setText(f"Worker: 🟢 {len(self.worker_processes)} Activo")
         self.workers_badge.setStyleSheet("font-weight: bold; color: #0b8043;")
-        self.workers_btn.setText("⏹ Detener Workers")
-        self.log_message(f"{count} Nodos Workers iniciados y conectados al Broker.")
+        self.workers_btn.setText("⏹ Detener Worker")
+        self.log_message("1 Nodo Worker iniciado y conectado al Broker.")
 
     def stop_workers_process(self):
         for proc in self.worker_processes:
@@ -588,10 +594,10 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
         self.worker_processes.clear()
-        self.workers_badge.setText("Workers: ⚪ 0 Activos")
+        self.workers_badge.setText("Worker: ⚪ Inactivo")
         self.workers_badge.setStyleSheet("font-weight: bold; color: #555;")
-        self.workers_btn.setText("▶ Iniciar 2 Workers")
-        self.log_message("Todos los Workers locales fueron detenidos.")
+        self.workers_btn.setText("▶ Iniciar 1 Worker")
+        self.log_message("Worker local detenido.")
 
     def stop_all_services(self):
         self.stop_workers_process()
